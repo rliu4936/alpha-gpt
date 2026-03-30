@@ -1,0 +1,29 @@
+# Data processing
+pandas
+numpy
+pyarrow
+
+# ML / Genetic Programming
+deap
+scikit-learn
+scipy
+
+# LLM / Multi-agent
+openai
+anthropic
+
+# Quant metrics & evaluation
+statsmodels
+empyrical-reloaded
+
+# Visualization
+matplotlib
+seaborn
+
+# Jupyter
+jupyter
+ipykernel
+
+# Utilities
+tqdm
+python-dotenv
