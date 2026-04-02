@@ -53,17 +53,17 @@ def create_primitive_set(terminal_names: list[str]) -> gp.PrimitiveSet:
         log_abs, abs_val, sign, neg,
     ]
     for op in unary_ops:
-        pset.addPrimitive(op, in_types=[pd.DataFrame], ret_type=pd.DataFrame, name=op.__name__)
+        pset.addPrimitive(op, 1)
 
     # --- Register binary operators (2 inputs) ---
     binary_ops = [add, sub, mul, safe_div, ts_corr_10, ts_corr_20]
     for op in binary_ops:
-        pset.addPrimitive(op, in_types=[pd.DataFrame, pd.DataFrame], ret_type=pd.DataFrame, name=op.__name__)
+        pset.addPrimitive(op, 2)
 
     # --- Register terminals (data fields) ---
     # Terminals are added as named constants; actual data is injected at evaluation time
     for name in terminal_names:
-        pset.addTerminal(name, ret_type=pd.DataFrame, name=name)
+        pset.addTerminal(name, name)
 
     return pset
 

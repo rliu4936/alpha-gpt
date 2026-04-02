@@ -65,11 +65,14 @@ def load_crsp():
     df["date"] = pd.to_datetime(df["YYYYMMDD"], format="%Y%m%d")
     df = df.drop(columns=["YYYYMMDD"])
 
+    # Convert all relevant measure columns to numeric to avoid aggregation errors
+    num_cols = ["DlyPrc", "DlyRet", "DlyCap", "DlyVol", "DlyClose", "DlyOpen", "DlyHigh", "DlyLow", "ShrOut"]
+    for col in num_cols:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
     # Use absolute price (CRSP convention: negative = bid/ask avg)
     df["DlyPrc"] = df["DlyPrc"].abs()
-
-    # Convert returns to numeric, coerce errors
-    df["DlyRet"] = pd.to_numeric(df["DlyRet"], errors="coerce")
 
     # Drop penny stocks (price < $5 on average)
     avg_price = df.groupby("PERMNO")["DlyPrc"].mean()
@@ -159,6 +162,7 @@ def prepare_ratio_panels(out_dir, valid_permnos):
     # For each ratio, pivot to panel and forward-fill (ratios are quarterly)
     ratio_fields = [c for c in df.columns if c not in ("PERMNO", "date")]
     for field in ratio_fields:
+        df[field] = pd.to_numeric(df[field], errors="coerce")
         panel = df.pivot_table(index="date", columns="PERMNO", values=field)
         panel = panel.sort_index()
 

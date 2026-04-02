@@ -6,6 +6,9 @@ Usage:
 
 import sys
 import logging
+import os
+import json
+import datetime
 
 from openai import OpenAI
 
@@ -18,6 +21,7 @@ from alpha_gpt.gp_search.engine import run_gp, _eval_expr
 from alpha_gpt.backtest.backtester import backtest_alpha
 from alpha_gpt.analysis.metrics import compute_ic, compute_icir, compute_turnover
 from alpha_gpt.analysis.explainer import explain_alpha
+from alpha_gpt.analysis.visualize import plot_gp_evolution, plot_equity_curves
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -34,6 +38,12 @@ def run_pipeline(trading_idea: str, config: Config | None = None) -> list[dict]:
         List of top-K alpha results with expressions, metrics, and explanations.
     """
     config = config or Config()
+    
+    # Create outputs directory
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    out_dir = os.path.join("outputs", timestamp)
+    os.makedirs(out_dir, exist_ok=True)
+    print(f"\n=== Initializing run. Saving outputs to: {out_dir} ===")
 
     # --- Step 1: Load data ---
     print("\n=== Step 1: Loading data ===")
@@ -54,6 +64,10 @@ def run_pipeline(trading_idea: str, config: Config | None = None) -> list[dict]:
         num_rounds=config.debate_rounds,
     )
 
+    # Save debate results
+    with open(os.path.join(out_dir, "debate_seeds.json"), "w") as f:
+        json.dump(seed_proposals, f, indent=2, ensure_ascii=False)
+
     # Parse seed expressions into DEAP trees
     terminal_names = [name for name in DEFAULT_TERMINALS if name in train.panels]
     pset = create_primitive_set(terminal_names)
@@ -64,7 +78,7 @@ def run_pipeline(trading_idea: str, config: Config | None = None) -> list[dict]:
 
     # --- Step 3: GP search ---
     print("\n=== Step 3: Genetic programming search ===")
-    evolved = run_gp(
+    evolved, logbook = run_gp(
         seed_trees=seed_trees,
         data=train,
         population_size=config.gp_population,
@@ -74,10 +88,14 @@ def run_pipeline(trading_idea: str, config: Config | None = None) -> list[dict]:
         tournament_size=config.gp_tournament_size,
         max_depth=config.gp_max_depth,
     )
+    
+    # Plot GP evolution
+    plot_gp_evolution(logbook, os.path.join(out_dir, "gp_evolution.png"))
 
     # --- Step 4: Evaluate top-K on test set ---
     print(f"\n=== Step 4: Evaluating top {config.top_k} alphas on test set ===")
     results = []
+    backtests = {}
     for alpha_dict in evolved[:config.top_k]:
         expr_str = alpha_dict["expression"]
         tree = alpha_dict["tree"]
@@ -97,6 +115,7 @@ def run_pipeline(trading_idea: str, config: Config | None = None) -> list[dict]:
 
         # Backtest
         bt = backtest_alpha(alpha_values, test.forward_returns)
+        backtests[expr_str] = bt
 
         # Explain
         explanation = explain_alpha(
@@ -126,16 +145,28 @@ def run_pipeline(trading_idea: str, config: Config | None = None) -> list[dict]:
         print(f"    Train IC: {alpha_dict['fitness']:.4f} | Test IC: {ic_mean:.4f} | "
               f"Sharpe: {bt.sharpe:.2f} | Return: {bt.annual_return:.2%}")
 
-    # --- Step 5: Summary ---
-    print(f"\n{'='*60}")
-    print(f"=== Results: {len(results)} alphas evaluated ===")
-    print(f"{'='*60}")
-    for i, r in enumerate(results):
-        print(f"\n#{i+1}: {r['expression'][:80]}")
-        print(f"  Test IC={r['test_ic']:.4f} | ICIR={r['icir']:.4f} | "
-              f"Sharpe={r['sharpe']:.2f} | Return={r['annual_return']:.2%} | "
-              f"MaxDD={r['max_drawdown']:.2%}")
-        print(f"  {r['explanation'][:200]}")
+    # Plot equity curves
+    if backtests:
+        plot_equity_curves(backtests, os.path.join(out_dir, "equity_curves.png"))
+
+    # Save alpha report markdown
+    report_path = os.path.join(out_dir, "alpha_report.md")
+    with open(report_path, "w") as f:
+        f.write("# Alpha-GPT Final Report\n\n")
+        f.write(f"**Trading Idea:** {trading_idea}\n\n")
+        
+        for i, r in enumerate(results):
+            f.write(f"## Rank {i+1}: `{r['expression']}`\n\n")
+            f.write(f"- **Test IC:** {r['test_ic']:.4f}\n")
+            f.write(f"- **ICIR:** {r['icir']:.4f}\n")
+            f.write(f"- **Annual Return:** {r['annual_return']:.2%}\n")
+            f.write(f"- **Sharpe:** {r['sharpe']:.2f}\n")
+            f.write(f"- **Max Drawdown:** {r['max_drawdown']:.2%}\n\n")
+            f.write("### AI Explanation\n")
+            f.write(f"{r['explanation']}\n\n")
+            f.write("---\n\n")
+            
+    print(f"\nSaved final report to {report_path}")
 
     return results
 

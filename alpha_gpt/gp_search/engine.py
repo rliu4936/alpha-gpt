@@ -38,8 +38,6 @@ def _evaluate_tree(individual, pset, panels: dict[str, pd.DataFrame]) -> pd.Data
 
 def _eval_expr(individual, pset, terminal_data: dict[str, pd.DataFrame]) -> pd.DataFrame:
     """Recursively evaluate an expression tree with actual data."""
-    func = gp.compile(individual, pset)
-
     # DEAP compiles to a function that takes no args (terminals are constants)
     # but our "constants" are actually string names, so we need to intercept
     # We'll use a different approach: walk the tree and evaluate
@@ -116,7 +114,7 @@ def run_gp(
     max_depth: int = 6,
     min_depth: int = 2,
     verbose: bool = True,
-) -> list[dict]:
+) -> tuple[list[dict], object]:
     """Run genetic programming to evolve alpha expressions.
 
     Args:
@@ -132,7 +130,8 @@ def run_gp(
         verbose: Print progress.
 
     Returns:
-        List of dicts with 'expression' (str) and 'fitness' (float),
+        Tuple of (results_list, logbook)
+        results_list is a list of dicts with 'expression' (str) and 'fitness' (float),
         sorted by fitness descending.
     """
     # Determine available terminals from data
@@ -209,4 +208,4 @@ def run_gp(
         for i, r in enumerate(results):
             print(f"  {i+1}. IC={r['fitness']:.4f}  {r['expression'][:80]}")
 
-    return results
+    return results, log

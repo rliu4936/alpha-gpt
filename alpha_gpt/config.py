@@ -13,7 +13,7 @@ class Config:
     # Data
     data_dir: str = "data/panels"
 
-    # LLM via OpenRouter
+    # LLM via OpenRouter/OpenAI
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     llm_model: str = "deepseek/deepseek-chat-v3-0324"
 

@@ -41,12 +41,22 @@ def split_data(
         for name, df in p.items():
             if name == "forward_returns":
                 continue
-            mask = (df.index >= start) & (df.index <= end) if start else (df.index <= end)
+            if start is None:
+                mask = (df.index <= end)
+            elif end is None:
+                mask = (df.index >= start)
+            else:
+                mask = (df.index >= start) & (df.index <= end)
             sliced[name] = df.loc[mask]
 
         fwd = p.get("forward_returns", pd.DataFrame())
         if not fwd.empty:
-            mask = (fwd.index >= start) & (fwd.index <= end) if start else (fwd.index <= end)
+            if start is None:
+                mask = (fwd.index <= end)
+            elif end is None:
+                mask = (fwd.index >= start)
+            else:
+                mask = (fwd.index >= start) & (fwd.index <= end)
             fwd = fwd.loc[mask]
 
         return DataSplit(panels=sliced, forward_returns=fwd)
