@@ -1,7 +1,7 @@
 """Configuration for Alpha-GPT 3.0 pipeline."""
 
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from dotenv import load_dotenv
 
@@ -15,7 +15,7 @@ class Config:
 
     # LLM via OpenRouter/OpenAI
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
-    llm_model: str = "deepseek/deepseek-chat-v3-0324"
+    llm_model: str = "deepseek/deepseek-v3.2"
 
     # GP search
     gp_population: int = 100
@@ -27,6 +27,10 @@ class Config:
 
     # Debate
     debate_rounds: int = 2
+    idea_hypothesis_target: int = 3
+    seed_formula_target: int = 8
+    debate_json_retries: int = 2
+    save_debate_artifacts: bool = True
 
     # Evaluation
     top_k: int = 5

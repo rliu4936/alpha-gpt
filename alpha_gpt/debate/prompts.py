@@ -1,130 +1,328 @@
-"""Prompt templates for the debate framework."""
+"""Prompt templates for the two-stage debate framework."""
 
 OPERATOR_CATALOG = """
 ## Available Operators
 
 ### Time-series (per-stock, along time axis)
-- ts_mean(x, window) — rolling mean (windows: 5, 10, 20, 60)
-- ts_std(x, window) — rolling std (windows: 5, 10, 20, 60)
-- ts_delta(x, window) — x - x_shifted (windows: 5, 10, 20)
-- ts_rank(x, window) — rolling percentile rank (windows: 5, 10, 20)
-- ts_min(x, window) — rolling min (windows: 5, 10, 20)
-- ts_max(x, window) — rolling max (windows: 5, 10, 20)
-- ts_returns(x, window) — percent change (windows: 1, 5, 20)
-- ts_corr(x, y, window) — rolling correlation (windows: 10, 20)
+- ts_mean(x, window) - rolling mean (windows: 5, 10, 20, 60)
+- ts_std(x, window) - rolling std (windows: 5, 10, 20, 60)
+- ts_delta(x, window) - x - x_shifted (windows: 5, 10, 20)
+- ts_rank(x, window) - rolling percentile rank (windows: 5, 10, 20)
+- ts_min(x, window) - rolling min (windows: 5, 10, 20)
+- ts_max(x, window) - rolling max (windows: 5, 10, 20)
+- ts_returns(x, window) - percent change (windows: 1, 5, 20)
+- ts_corr(x, y, window) - rolling correlation (windows: 10, 20)
 
 ### Cross-sectional (across stocks each day)
-- cs_rank(x) — percentile rank across stocks
-- cs_zscore(x) — z-score across stocks
+- cs_rank(x) - percentile rank across stocks
+- cs_zscore(x) - z-score across stocks
 
 ### Element-wise
 - add(x, y), sub(x, y), mul(x, y), safe_div(x, y)
-- log_abs(x) — log of absolute value
-- abs_val(x) — absolute value
-- sign(x) — sign function
-- neg(x) — negation
+- log_abs(x) - log of absolute value
+- abs_val(x) - absolute value
+- sign(x) - sign function
+- neg(x) - negation
 
 ## Available Data Fields (terminals)
 - Price/volume: close, open, high, low, volume, returns
 - Size: shrout (shares outstanding), market_cap
-- Fundamentals: bm (book-to-market), roe, roa, pe_op_dil (P/E), ptb (price-to-book), npm (net profit margin), gpm (gross profit margin), debt_at, curr_ratio, accrual
-
-## Expression Format
-Write expressions using the operators and data fields above. Examples:
-- cs_rank(ts_returns(close, 20)) — 20-day momentum ranked cross-sectionally
-- safe_div(ts_delta(volume, 5), ts_mean(volume, 20)) — volume surge ratio
-- sub(cs_rank(bm), cs_rank(ts_std(returns, 20))) — value minus volatility
-- neg(ts_corr(volume, close, 20)) — negative price-volume correlation
+- Fundamentals: bm, roe, roa, pe_op_dil, ptb, npm, gpm, debt_at, curr_ratio, accrual
 """
 
-MOMENTUM_SYSTEM = f"""You are a quantitative researcher specializing in MOMENTUM and TREND-FOLLOWING strategies.
-You believe that stocks that have been going up tend to continue going up, and that volume confirms trends.
-Your expertise includes: price momentum, volume breakouts, relative strength, trend persistence.
+MOMENTUM_SYSTEM = f"""You are the Momentum Agent in a multi-agent quantitative research debate.
+You are a complete researcher, not a narrow role worker. In every stage you must reason across:
+- mechanism
+- signal role
+- data and proxy definition
+- directionality
+- subfactor design
+- filters
+- normalization and neutralization
+- implementability
+- formula design when formulas are requested
 
-When proposing alpha expressions, favor signals based on:
-- Recent price changes and returns over various horizons
-- Volume patterns that confirm price trends
-- Relative strength compared to the market
-- Breakout signals from recent ranges
+You have a momentum and trend-following prior. You naturally favor explanations based on
+trend persistence, price strength, breakouts, volume confirmation, and information diffusion.
 
-{OPERATOR_CATALOG}"""
+{OPERATOR_CATALOG}
+"""
 
-MEAN_REVERSION_SYSTEM = f"""You are a quantitative researcher specializing in MEAN-REVERSION and CONTRARIAN strategies.
-You believe that stocks that have moved too far from their fair value tend to revert.
-Your expertise includes: oversold bounces, ratio extremes, volatility mean-reversion, statistical arbitrage.
+MEAN_REVERSION_SYSTEM = f"""You are the Mean-Reversion Agent in a multi-agent quantitative research debate.
+You are a complete researcher, not a narrow role worker. In every stage you must reason across:
+- mechanism
+- signal role
+- data and proxy definition
+- directionality
+- subfactor design
+- filters
+- normalization and neutralization
+- implementability
+- formula design when formulas are requested
 
-When proposing alpha expressions, favor signals based on:
-- Extreme deviations from moving averages
-- Oversold/overbought conditions
-- Volatility spikes that tend to revert
-- Price-to-fundamental ratios at extremes
+You have a mean-reversion and contrarian prior. You naturally favor explanations based on
+overshooting, reversal, temporary dislocations, volatility spikes, and correction of extremes.
 
-{OPERATOR_CATALOG}"""
+{OPERATOR_CATALOG}
+"""
 
-FUNDAMENTAL_SYSTEM = f"""You are a quantitative researcher specializing in FUNDAMENTAL and VALUE-BASED strategies.
-You believe that cheap, high-quality stocks outperform over time.
-Your expertise includes: value investing, quality factors, earnings signals, balance sheet analysis.
+FUNDAMENTAL_SYSTEM = f"""You are the Fundamental Agent in a multi-agent quantitative research debate.
+You are a complete researcher, not a narrow role worker. In every stage you must reason across:
+- mechanism
+- signal role
+- data and proxy definition
+- directionality
+- subfactor design
+- filters
+- normalization and neutralization
+- implementability
+- formula design when formulas are requested
 
-When proposing alpha expressions, favor signals based on:
-- Valuation ratios (book-to-market, P/E, price-to-book)
-- Profitability metrics (ROE, ROA, margins)
-- Earnings quality and accruals
-- Financial health (leverage, liquidity)
+You have a fundamental and quality/value prior. You naturally favor explanations based on
+valuation, quality, profitability, balance sheet strength, and slower information adjustment.
 
-{OPERATOR_CATALOG}"""
+{OPERATOR_CATALOG}
+"""
 
-ROUND1_USER = """Trading idea: {trading_idea}
+IDEA_DRAFT_USER = """Trading idea:
+{trading_idea}
 
-Based on this trading idea, propose 2-3 alpha expressions that could capture this signal.
-For each alpha, provide:
-1. The expression using the available operators and data fields
-2. A one-sentence description of what it captures
-3. Brief rationale for why it should work
+Available terminals:
+{available_terminals}
 
-Respond in JSON format:
-[
-  {{"expression": "...", "description": "...", "rationale": "..."}},
-  ...
-]"""
+Hard constraints:
+{constraints}
 
-ROUND2_USER = """Trading idea: {trading_idea}
+Data notes:
+{data_notes}
 
-Here are the alpha proposals from all researchers so far:
-{prior_proposals}
+Produce exactly one structured research hypothesis draft.
 
-Review the proposals above. You may:
-- Critique weaknesses in others' proposals
-- Improve upon existing proposals with better expressions
-- Propose new alphas inspired by the discussion
+Important:
+- Do NOT write any formula expressions in this stage.
+- This stage is about defining the research object, not implementing it.
+- If the idea is non-directional, say so clearly.
+- If the idea is better treated as a filter or regime detector, say so clearly.
 
-Propose 1-2 revised or new alpha expressions.
-Respond in JSON format:
-[
-  {{"expression": "...", "description": "...", "rationale": "..."}},
-  ...
-]"""
+Return a JSON object with these fields:
+{{
+  "title": "...",
+  "mechanism": "...",
+  "signal_type": "...",
+  "payoff_definition": "...",
+  "directionality": "...",
+  "direction_separation_plan": "...",
+  "data_definition": "...",
+  "candidate_proxies": ["..."],
+  "subfactor_design": ["..."],
+  "filter_policy": "...",
+  "normalization_policy": "...",
+  "neutralization_policy": "...",
+  "implementability": "...",
+  "open_risks": ["..."],
+  "stage2_constraints": ["..."],
+  "summary": "..."
+}}
+"""
 
-MODERATOR_SYSTEM = """You are a senior quant researcher moderating a debate between three alpha researchers.
-Your job is to:
-1. Remove duplicate or near-duplicate expressions
-2. Validate that expressions use only the available operators and data fields
-3. Select the top 5-8 most promising and diverse seed alphas
-4. Ensure a mix of different signal types (momentum, value, quality, etc.)
+IDEA_REVIEW_USER = """Trading idea:
+{trading_idea}
 
-Respond with a JSON array of the selected alphas:
-[
-  {{"expression": "...", "description": "..."}},
-  ...
-]"""
+Review the following idea proposals written by other agents:
+{proposals_json}
 
-MODERATOR_USER = """Here are all proposed alpha expressions from the debate:
+For each proposal, provide exactly one review object.
+Return a JSON array where each item has:
+{{
+  "target_proposal_id": "...",
+  "mechanism_quality": 1-5,
+  "signal_type_clarity": 1-5,
+  "payoff_clarity": 1-5,
+  "directionality_clarity": 1-5,
+  "subfactor_quality": 1-5,
+  "filter_logic": 1-5,
+  "normalization_soundness": 1-5,
+  "implementability": 1-5,
+  "decision": "accept|accept_with_revision|reject",
+  "comments": ["...", "..."]
+}}
+"""
 
-{all_proposals}
+IDEA_REVISION_USER = """Trading idea:
+{trading_idea}
 
-Select the top 5-8 most promising and diverse expressions. Remove duplicates.
-Only include expressions that use valid operators and data fields from the catalog.
+Your original idea proposal:
+{proposal_json}
 
-Available operators and fields:
-{operator_catalog}
+Peer reviews:
+{reviews_json}
 
-Respond with a JSON array only."""
+Revise your own proposal in response to the reviews.
+You may accept or reject review points, but your revision must be explicit.
+Do NOT write any formulas.
+
+Return a JSON object:
+{{
+  "accepted_feedback": ["..."],
+  "rejected_feedback": ["..."],
+  "revision_summary": "...",
+  "revised_proposal": {{
+    "title": "...",
+    "mechanism": "...",
+    "signal_type": "...",
+    "payoff_definition": "...",
+    "directionality": "...",
+    "direction_separation_plan": "...",
+    "data_definition": "...",
+    "candidate_proxies": ["..."],
+    "subfactor_design": ["..."],
+    "filter_policy": "...",
+    "normalization_policy": "...",
+    "neutralization_policy": "...",
+    "implementability": "...",
+    "open_risks": ["..."],
+    "stage2_constraints": ["..."],
+    "summary": "..."
+  }}
+}}
+"""
+
+FORMULA_DRAFT_USER = """You are now in Stage 2: Formula Debate.
+
+Available terminals:
+{available_terminals}
+
+Hypothesis specs:
+{hypotheses_json}
+
+For each hypothesis, propose 1-2 formula candidates.
+
+Important:
+- Every formula must bind to a `hypothesis_id`.
+- Every formula must declare a `formula_role`.
+- Valid roles are: `main_alpha`, `directional_alpha`, `filter`, `composite`.
+- Use only the available terminals and operators.
+
+Return a JSON array where each item has:
+{{
+  "hypothesis_id": "...",
+  "formula_role": "main_alpha|directional_alpha|filter|composite",
+  "expression": "...",
+  "plain_language_mapping": "...",
+  "terminals_used": ["..."],
+  "operators_used": ["..."],
+  "expected_signal_direction": "...",
+  "embedded_filter_logic": "...",
+  "normalization_in_formula": "...",
+  "neutralization_in_formula_or_postprocess": "...",
+  "rationale": "..."
+}}
+"""
+
+FORMULA_REVIEW_USER = """Review the following formula proposals written by other agents:
+{proposals_json}
+
+Return a JSON array where each item has:
+{{
+  "target_formula_id": "...",
+  "faithfulness": 1-5,
+  "implementability": 1-5,
+  "robustness": 1-5,
+  "novelty": 1-5,
+  "simplicity": 1-5,
+  "decision": "accept|accept_with_revision|reject",
+  "comments": ["...", "..."]
+}}
+"""
+
+FORMULA_REVISION_USER = """Your formula proposals:
+{proposals_json}
+
+Peer reviews on your formulas:
+{reviews_json}
+
+Revise only your own formulas.
+Return a JSON array where each item has:
+{{
+  "base_formula_id": "...",
+  "accepted_feedback": ["..."],
+  "rejected_feedback": ["..."],
+  "revision_summary": "...",
+  "revised_formula": {{
+    "hypothesis_id": "...",
+    "formula_role": "main_alpha|directional_alpha|filter|composite",
+    "expression": "...",
+    "plain_language_mapping": "...",
+    "terminals_used": ["..."],
+    "operators_used": ["..."],
+    "expected_signal_direction": "...",
+    "embedded_filter_logic": "...",
+    "normalization_in_formula": "...",
+    "neutralization_in_formula_or_postprocess": "...",
+    "rationale": "..."
+  }}
+}}
+"""
+
+MODERATOR_IDEA_SYSTEM = """You are the moderator of Stage 1: Idea Debate.
+Your job is to synthesize revised agent proposals into 2-3 final Research Hypothesis Specs.
+You do not invent a new thesis from scratch. You converge the debate, preserve meaningful distinctions,
+remove duplicates, and produce structured outputs."""
+
+MODERATOR_IDEA_USER = """Trading idea:
+{trading_idea}
+
+Revised idea proposals:
+{revisions_json}
+
+Synthesize 2-3 final research hypothesis specs.
+Return a JSON array where each item has:
+{{
+  "title": "...",
+  "source_agents": ["..."],
+  "mechanism": "...",
+  "signal_type": "...",
+  "payoff_definition": "...",
+  "directionality": "...",
+  "direction_separation_plan": "...",
+  "data_definition": "...",
+  "candidate_proxies": ["..."],
+  "subfactor_design": ["..."],
+  "filter_policy": "...",
+  "normalization_policy": "...",
+  "neutralization_policy": "...",
+  "implementability": "...",
+  "open_risks": ["..."],
+  "stage2_constraints": ["..."],
+  "summary": "..."
+}}
+"""
+
+MODERATOR_FORMULA_SYSTEM = """You are the moderator of Stage 2: Formula Debate.
+Your job is to select a diverse, valid seed set from the revised formula candidates.
+Prefer formulas that are faithful to their hypotheses, diverse across hypotheses and roles,
+and parser-friendly."""
+
+MODERATOR_FORMULA_USER = """Hypothesis specs:
+{hypotheses_json}
+
+Revised formula candidates:
+{formula_candidates_json}
+
+Select up to {target_count} formula candidates by ID.
+Return a JSON object:
+{{
+  "selected_formula_ids": ["...", "..."],
+  "selection_rationale": ["...", "..."]
+}}
+"""
+
+JSON_REPAIR_USER = """The previous response was not valid JSON.
+
+Original prompt:
+{original_prompt}
+
+Invalid response:
+{invalid_response}
+
+Rewrite the answer as valid JSON only. Do not add markdown, commentary, or explanation."""

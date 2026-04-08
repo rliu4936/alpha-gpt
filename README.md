@@ -2,7 +2,7 @@
 
 ## Context
 
-We're building Alpha-GPT 3.0: a multi-agent LLM framework that discovers quantitative trading alphas (symbolic formulas predicting stock returns). The novel contribution is a **debate framework** where multiple LLM agents argue over trading ideas before generating seed formulas, which are then evolved via genetic programming. We have CRSP daily prices (~28GB), Compustat fundamentals (~2.5GB), and pre-computed financial ratios (~570MB) as data.
+We're building Alpha-GPT 3.0: a multi-agent LLM framework that discovers quantitative trading alphas (symbolic formulas predicting stock returns). The novel contribution is a two-stage **debate framework**: agents first debate a natural-language trading idea to converge on `2-3` research hypothesis specs, then debate how to translate those hypotheses into seed formulas before GP evolution and evaluation. We have CRSP daily prices (~28GB), Compustat fundamentals (~2.5GB), and pre-computed financial ratios (~570MB) as data.
 
 **Goal:** End-to-end MVP that takes a trading idea in natural language and produces evaluated alpha formulas with quant metrics.
 
@@ -23,9 +23,9 @@ alpha_gpt/
 │   └── alpha_ops.py           # All operators (ts, cs, element-wise) on panel DataFrames
 │
 ├── debate/
-│   ├── agents.py              # Debate agent personas + LLM calls
-│   ├── moderator.py           # Orchestrate 2-round debate, deduplicate & validate
-│   └── prompts.py             # System/user prompt templates
+│   ├── agents.py              # Peer research agents for idea-stage and formula-stage debate
+│   ├── moderator.py           # Coordinate convergence across both debate stages
+│   └── prompts.py             # Prompt templates for idea debate and formula debate
 │
 ├── gp_search/
 │   ├── primitives.py          # DEAP PrimitiveSet (curried operators + terminals)
@@ -131,31 +131,16 @@ All ops must handle NaN gracefully (propagate, don't crash).
 
 **Files:** `alpha_gpt/debate/agents.py`, `moderator.py`, `prompts.py`
 
-### agents.py
-Three debate agents with distinct personas:
-1. **Momentum Agent** — favors trend-following signals (price momentum, volume breakouts)
-2. **Mean-Reversion Agent** — favors contrarian signals (oversold bounces, ratio extremes)
-3. **Fundamental Agent** — favors value/quality signals (earnings, book-to-market, ROE)
+The debate framework is now organized as a two-stage research workflow:
 
-Each agent: `generate_alphas(trading_idea, round_num, prior_debate_context) → list[dict]`
-- Calls OpenAI/Anthropic API with persona system prompt
-- Prompt includes: operator catalog, available data fields, examples of valid expressions
-- Returns list of `{expression, description, rationale}`
+1. **Idea Debate**
+   Three full research agents independently analyze the same natural-language idea, peer review one another, revise their proposals, and converge to `2-3` structured research hypothesis specs.
+2. **Formula Debate**
+   The same agents then translate those hypothesis specs into formula candidates, peer review and revise them, and hand a validated seed pool to GP.
 
-### moderator.py
-- `run_debate(trading_idea, num_rounds=2) → list[dict]`
-- **Round 1:** All 3 agents independently propose 2-3 seed alphas each
-- **Round 2:** Each agent sees all proposals, critiques others, and can revise or propose new ones
-- **Moderation:** LLM call to deduplicate, validate syntax, pick top 5-8 seeds
-- Output: validated seed alpha expressions ready for GP injection
+Each stage follows the same high-level pattern: independent proposal, peer review/judging, self-revision, and moderator convergence. Stage 1 outputs hypothesis specs rather than formulas; Stage 2 outputs seed formulas that remain traceable to those hypotheses.
 
-### prompts.py
-- System prompts for each persona
-- Operator catalog reference (copy of available operators + terminals)
-- Few-shot examples of valid alpha expressions
-- Debate round templates
-
-**Verify:** Run debate on "momentum reversal after earnings" idea, inspect outputs for valid expressions.
+See `docs/debate-framework.md` for the full design specification.
 
 ---
 
@@ -226,18 +211,21 @@ def run_pipeline(trading_idea: str, config: Config) -> dict:
     panels = load_panels(config.data_dir)
     train, val, test = split_data(panels, ...)
 
-    # 2. Debate → seed alphas
-    seeds = run_debate(trading_idea, config)
+    # 2. Idea Debate -> consensus hypotheses
+    hypotheses = run_idea_debate(trading_idea, config)
 
-    # 3. GP search (evolve seeds on train set)
+    # 3. Formula Debate -> validated seed formulas
+    seeds = run_formula_debate(hypotheses, config)
+
+    # 4. GP search (evolve seeds on train set)
     evolved = run_gp(seeds, train, config)
 
-    # 4. Evaluate top-K on test set
+    # 5. Evaluate top-K on test set
     for alpha in evolved[:config.top_k]:
         alpha.ic_series = compute_ic(alpha.values, test.forward_returns)
         alpha.backtest = backtest_alpha(alpha.values, test.forward_returns)
 
-    # 5. Explain results
+    # 6. Explain results
     for alpha in evolved[:config.top_k]:
         alpha.explanation = explain_alpha(alpha.expression, alpha.backtest, alpha.ic_series)
 
@@ -251,11 +239,11 @@ def run_pipeline(trading_idea: str, config: Config) -> dict:
 ## Implementation Order
 
 1. **Data pipeline** — everything depends on this
-2. **Operators** — needed by GP and by debate prompt examples
+2. **Operators** — needed by GP and by both debate-stage prompt examples
 3. **GP search** — core search engine, test with random seeds first
 4. **Backtester** — long-short portfolio sim, needed to evaluate alphas
 5. **Analysis metrics** — IC, ICIR, turnover
-6. **Debate framework** — plug in LLM-generated seeds
+6. **Debate framework** — converge ideas into hypotheses, then formulas into validated seeds
 7. **Explainer** — LLM explains results
 8. **Integration** — wire everything together in main.py
 
