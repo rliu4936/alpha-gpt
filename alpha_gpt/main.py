@@ -573,6 +573,7 @@ def run_full(trading_idea: str, config: Config, out_dir: str, gp_seed: int = 0):
 def run_compare():
     """Scan outputs/*/results.json and produce cross-mode comparison report."""
     import glob
+    from collections import defaultdict
 
     pattern = os.path.join("outputs", "*", "results.json")
     files = sorted(glob.glob(pattern))
@@ -586,7 +587,6 @@ def run_compare():
             all_results.append(json.load(f))
 
     # Group by mode
-    from collections import defaultdict
     by_mode: dict[str, list[dict]] = defaultdict(list)
     for r in all_results:
         by_mode[r["mode"]].append(r)
@@ -594,84 +594,114 @@ def run_compare():
     compare_dir = os.path.join("outputs", "comparison")
     os.makedirs(compare_dir, exist_ok=True)
 
-    # Build summary table
+    # Build summary rows — two aggregation levels per mode
     rows = []
     for mode, runs in sorted(by_mode.items()):
-        ics, icirs, sharpes = [], [], []
-        for run in runs:
-            if run["top_alphas"]:
-                best = max(run["top_alphas"], key=lambda a: a["test_ic"])
-                ics.append(best["test_ic"])
-                icirs.append(best["icir"])
-                sharpes.append(best["sharpe"])
-        if ics:
-            rows.append({
-                "mode": mode,
-                "n_runs": len(runs),
-                "ic_mean": np.mean(ics),
-                "ic_std": np.std(ics),
-                "icir_mean": np.mean(icirs),
-                "icir_std": np.std(icirs),
-                "sharpe_mean": np.mean(sharpes),
-                "sharpe_std": np.std(sharpes),
-            })
+        median_ics, median_icirs, median_sharpes = [], [], []
+        best_ics, best_icirs, best_sharpes = [], [], []
 
-    # Save summary table as markdown
+        for run in runs:
+            alphas = run.get("top_alphas", [])
+            if not alphas:
+                continue
+
+            ics = [a["test_ic"] for a in alphas]
+            icirs = [a["icir"] for a in alphas]
+            sharpes = [a["sharpe"] for a in alphas]
+
+            # Median of top-k for this run
+            median_ics.append(float(np.median(ics)))
+            median_icirs.append(float(np.median(icirs)))
+            median_sharpes.append(float(np.median(sharpes)))
+
+            # Best single alpha in this run
+            best_idx = int(np.argmax(ics))
+            best_ics.append(ics[best_idx])
+            best_icirs.append(icirs[best_idx])
+            best_sharpes.append(sharpes[best_idx])
+
+        if not median_ics:
+            continue
+
+        rows.append({
+            "mode": mode,
+            "n_runs": len(runs),
+            # Median of top-k, aggregated across runs
+            "median_ic_mean": float(np.mean(median_ics)),
+            "median_ic_std": float(np.std(median_ics)),
+            "median_icir_mean": float(np.mean(median_icirs)),
+            "median_icir_std": float(np.std(median_icirs)),
+            "median_sharpe_mean": float(np.mean(median_sharpes)),
+            "median_sharpe_std": float(np.std(median_sharpes)),
+            # Best alpha, aggregated across runs
+            "best_ic_mean": float(np.mean(best_ics)),
+            "best_ic_std": float(np.std(best_ics)),
+            "best_icir_mean": float(np.mean(best_icirs)),
+            "best_icir_std": float(np.std(best_icirs)),
+            "best_sharpe_mean": float(np.mean(best_sharpes)),
+            "best_sharpe_std": float(np.std(best_sharpes)),
+        })
+
+    # --- Console summary ---
+    print("\n" + "=" * 80)
+    print("COMPARISON SUMMARY — Median of Top-K Alphas")
+    print("=" * 80)
+    print(f"{'Mode':<18} {'Runs':>4}  {'IC':>18}  {'ICIR':>18}  {'Sharpe':>18}")
+    print("-" * 80)
+    for row in rows:
+        print(
+            f"{row['mode']:<18} {row['n_runs']:>4}  "
+            f"{row['median_ic_mean']:>7.4f}+/-{row['median_ic_std']:<7.4f}  "
+            f"{row['median_icir_mean']:>7.4f}+/-{row['median_icir_std']:<7.4f}  "
+            f"{row['median_sharpe_mean']:>7.2f}+/-{row['median_sharpe_std']:<7.2f}"
+        )
+
+    print()
+    print("COMPARISON SUMMARY — Best Alpha per Run")
+    print("=" * 80)
+    print(f"{'Mode':<18} {'Runs':>4}  {'IC':>18}  {'ICIR':>18}  {'Sharpe':>18}")
+    print("-" * 80)
+    for row in rows:
+        print(
+            f"{row['mode']:<18} {row['n_runs']:>4}  "
+            f"{row['best_ic_mean']:>7.4f}+/-{row['best_ic_std']:<7.4f}  "
+            f"{row['best_icir_mean']:>7.4f}+/-{row['best_icir_std']:<7.4f}  "
+            f"{row['best_sharpe_mean']:>7.2f}+/-{row['best_sharpe_std']:<7.2f}"
+        )
+
+    # --- Markdown report ---
     table_path = os.path.join(compare_dir, "summary_table.md")
     with open(table_path, "w") as f:
         f.write("# Cross-Mode Comparison\n\n")
+
+        f.write("## Median of Top-K Alphas\n\n")
         f.write("| Mode | Runs | IC (mean +/- std) | ICIR (mean +/- std) | Sharpe (mean +/- std) |\n")
         f.write("|------|------|--------------------|---------------------|-----------------------|\n")
         for row in rows:
             f.write(
                 f"| {row['mode']} | {row['n_runs']} | "
-                f"{row['ic_mean']:.4f} +/- {row['ic_std']:.4f} | "
-                f"{row['icir_mean']:.4f} +/- {row['icir_std']:.4f} | "
-                f"{row['sharpe_mean']:.2f} +/- {row['sharpe_std']:.2f} |\n"
+                f"{row['median_ic_mean']:.4f} +/- {row['median_ic_std']:.4f} | "
+                f"{row['median_icir_mean']:.4f} +/- {row['median_icir_std']:.4f} | "
+                f"{row['median_sharpe_mean']:.2f} +/- {row['median_sharpe_std']:.2f} |\n"
             )
-    print(f"Saved summary table to {table_path}")
 
-    # Save comparison.json
+        f.write("\n## Best Alpha per Run\n\n")
+        f.write("| Mode | Runs | IC (mean +/- std) | ICIR (mean +/- std) | Sharpe (mean +/- std) |\n")
+        f.write("|------|------|--------------------|---------------------|-----------------------|\n")
+        for row in rows:
+            f.write(
+                f"| {row['mode']} | {row['n_runs']} | "
+                f"{row['best_ic_mean']:.4f} +/- {row['best_ic_std']:.4f} | "
+                f"{row['best_icir_mean']:.4f} +/- {row['best_icir_std']:.4f} | "
+                f"{row['best_sharpe_mean']:.2f} +/- {row['best_sharpe_std']:.2f} |\n"
+            )
+    print(f"\nSaved summary table to {table_path}")
+
+    # --- JSON ---
     comparison_json_path = os.path.join(compare_dir, "comparison.json")
     with open(comparison_json_path, "w") as f:
         json.dump(rows, f, indent=2)
     print(f"Saved comparison.json to {comparison_json_path}")
-
-    # Attempt to build comparison equity curve plot
-    # We look for the best run's equity_curves.png directory to load backtests
-    # Since we don't persist the series, we just note which runs are best
-    # For the overlay plot, we'd need the cumulative return series — use results.json metadata
-    mode_curves: dict[str, pd.Series] = {}
-    for mode, runs in sorted(by_mode.items()):
-        # Find the best run by IC
-        best_run = None
-        best_ic = -np.inf
-        for run in runs:
-            if run["top_alphas"]:
-                top_ic = max(a["test_ic"] for a in run["top_alphas"])
-                if top_ic > best_ic:
-                    best_ic = top_ic
-                    best_run = run
-
-        if best_run is not None:
-            # Try to find the corresponding output directory's equity curve data
-            run_dir = None
-            for fpath in files:
-                with open(fpath) as f2:
-                    check = json.load(f2)
-                if check is best_run:
-                    run_dir = os.path.dirname(fpath)
-                    break
-            # We can't easily reconstruct the curve from results.json alone,
-            # so the comparison plot is built only when users have the curves
-            # stored. For now we skip this if unavailable.
-
-    if mode_curves:
-        plot_comparison_curves(
-            mode_curves=mode_curves,
-            benchmark=None,
-            out_path=os.path.join(compare_dir, "equity_curves_comparison.png"),
-        )
 
     print(f"\nComparison complete. See {compare_dir}/")
 

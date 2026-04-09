@@ -18,8 +18,8 @@ class Config:
     llm_model: str = "deepseek/deepseek-v3.2"
 
     # GP search
-    gp_population: int = 100
-    gp_generations: int = 20
+    gp_population: int = 50
+    gp_generations: int = 10
     gp_crossover: float = 0.7
     gp_mutation: float = 0.2
     gp_tournament_size: int = 3

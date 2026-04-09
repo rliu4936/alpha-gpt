@@ -15,8 +15,11 @@ logger = logging.getLogger(__name__)
 
 # Mapping from generic operator + window to curried name
 CURRIED_MAP = {}
-for op in ["ts_mean", "ts_std", "ts_min", "ts_max"]:
+for op in ["ts_mean", "ts_std"]:
     for w in [5, 10, 20, 60]:
+        CURRIED_MAP[(op, w)] = f"{op}_{w}"
+for op in ["ts_min", "ts_max"]:
+    for w in [5, 10, 20]:
         CURRIED_MAP[(op, w)] = f"{op}_{w}"
 for op in ["ts_delta", "ts_rank"]:
     for w in [5, 10, 20]:
@@ -29,7 +32,7 @@ for w in [10, 20]:
 # Default window for each operator family (used when LLM omits the window)
 DEFAULT_WINDOWS = {
     "ts_mean": 20, "ts_std": 20, "ts_min": 20, "ts_max": 20,
-    "ts_delta": 5, "ts_rank": 10, "ts_returns": 1, "ts_corr": 20,
+    "ts_delta": 5, "ts_rank": 20, "ts_returns": 1, "ts_corr": 20,
 }
 
 # Operators that are already curried (no window parameter)

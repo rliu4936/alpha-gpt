@@ -77,11 +77,15 @@ def _fitness(individual, pset, data: DataSplit) -> tuple[float]:
         if alpha_values.empty or alpha_values.isna().all().all():
             return (0.0,)
 
-        # Compute daily Spearman IC
+        # Compute daily Spearman IC (subsample dates for speed)
         fwd = data.forward_returns
         common_dates = alpha_values.index.intersection(fwd.index)
         if len(common_dates) < 30:
             return (0.0,)
+
+        # Use every 5th date to keep fitness eval fast
+        if len(common_dates) > 200:
+            common_dates = common_dates[::5]
 
         ics = []
         for date in common_dates:
@@ -163,9 +167,16 @@ def run_gp(
     toolbox.register("mate", gp.cxOnePoint)
     toolbox.register("mutate", gp.mutUniform, expr=toolbox.expr, pset=pset)
 
+    # Safe height check — DEAP can produce empty trees after crossover
+    def _safe_height(ind):
+        try:
+            return ind.height
+        except IndexError:
+            return max_depth + 1  # treat as too deep, discard
+
     # Depth limits to prevent bloat
-    toolbox.decorate("mate", gp.staticLimit(key=lambda ind: ind.height, max_value=max_depth))
-    toolbox.decorate("mutate", gp.staticLimit(key=lambda ind: ind.height, max_value=max_depth))
+    toolbox.decorate("mate", gp.staticLimit(key=_safe_height, max_value=max_depth))
+    toolbox.decorate("mutate", gp.staticLimit(key=_safe_height, max_value=max_depth))
 
     # Initialize population
     pop = toolbox.population(n=population_size)

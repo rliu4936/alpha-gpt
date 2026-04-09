@@ -1,5 +1,7 @@
 """Alpha quality metrics: IC, ICIR, turnover."""
 
+import warnings
+
 import numpy as np
 import pandas as pd
 from scipy.stats import spearmanr
@@ -19,7 +21,9 @@ def compute_ic(alpha_values: pd.DataFrame, forward_returns: pd.DataFrame) -> pd.
         common = a.index.intersection(f.index)
         if len(common) < 20:
             continue
-        ic, _ = spearmanr(a[common], f[common])
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            ic, _ = spearmanr(a[common], f[common])
         if not np.isnan(ic):
             ics[date] = ic
 
