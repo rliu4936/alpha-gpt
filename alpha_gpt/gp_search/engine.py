@@ -90,7 +90,9 @@ def _fitness(individual, pset, data: DataSplit) -> tuple[float]:
             common = a.index.intersection(f.index)
             if len(common) < 20:
                 continue
-            ic, _ = spearmanr(a[common], f[common])
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                ic, _ = spearmanr(a[common], f[common])
             if not np.isnan(ic):
                 ics.append(ic)
 
@@ -114,6 +116,7 @@ def run_gp(
     max_depth: int = 6,
     min_depth: int = 2,
     verbose: bool = True,
+    random_seed: int | None = None,
 ) -> tuple[list[dict], object]:
     """Run genetic programming to evolve alpha expressions.
 
@@ -128,12 +131,18 @@ def run_gp(
         max_depth: Maximum tree depth.
         min_depth: Minimum tree depth for generation.
         verbose: Print progress.
+        random_seed: Optional fixed seed for reproducibility across runs.
 
     Returns:
         Tuple of (results_list, logbook)
         results_list is a list of dicts with 'expression' (str) and 'fitness' (float),
         sorted by fitness descending.
     """
+    # Set random seeds for reproducibility
+    if random_seed is not None:
+        random.seed(random_seed)
+        np.random.seed(random_seed)
+
     # Determine available terminals from data
     terminal_names = [name for name in DEFAULT_TERMINALS if name in data.panels]
     pset = create_primitive_set(terminal_names)

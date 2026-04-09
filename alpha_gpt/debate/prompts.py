@@ -317,6 +317,34 @@ Return a JSON object:
 }}
 """
 
+SINGLE_AGENT_SYSTEM = f"""You are a quantitative researcher tasked with generating alpha signal formulas.
+You will be given a trading idea and must produce concrete formula expressions using only
+the available operators and data fields.
+
+{OPERATOR_CATALOG}
+"""
+
+SINGLE_AGENT_FORMULA_USER = """Trading idea:
+{trading_idea}
+
+Available terminals:
+{available_terminals}
+
+Generate up to {target_count} diverse seed formulas that capture the trading idea above.
+Each formula should use different operator combinations or capture different facets of the idea.
+
+Return a JSON array where each item has:
+{{
+  "expression": "...",
+  "rationale": "..."
+}}
+
+Rules:
+- Use ONLY the operators and terminals listed above.
+- Write formulas in functional form, e.g. cs_rank(ts_delta(close, 5))
+- Be concrete — every formula must be a valid expression, not pseudocode.
+"""
+
 JSON_REPAIR_USER = """The previous response was not valid JSON.
 
 Original prompt:

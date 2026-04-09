@@ -297,7 +297,7 @@ class DebateWorkflowTest(unittest.TestCase):
 
     def test_main_pipeline_uses_two_stage_debate_and_flattens_seed_expressions(self):
         try:
-            from alpha_gpt.main import run_pipeline
+            from alpha_gpt.main import run_full
         except ModuleNotFoundError as exc:
             self.skipTest(f"alpha_gpt.main could not be imported in this environment: {exc}")
 
@@ -333,26 +333,31 @@ class DebateWorkflowTest(unittest.TestCase):
             quantile_returns=pd.DataFrame({"mean_daily_return": [0.1], "count": [1]}, index=["Q1"]),
             cumulative_returns=pd.Series([1.0], index=idx),
         )
+        benchmark = pd.Series([1.0], index=idx)
 
-        with patch.dict("os.environ", {"OPENROUTER_API_KEY": "test-key"}):
-            with patch("alpha_gpt.main.load_panels", return_value={"close": df, "returns": df, "forward_returns": df}):
-                with patch("alpha_gpt.main.split_data", return_value=(split, split, split)):
-                    with patch("alpha_gpt.main.OpenAI", return_value=MagicMock()):
-                        with patch("alpha_gpt.main.run_idea_debate", return_value=(hypotheses, {"idea_brief.json": {"ok": True}})):
-                            with patch("alpha_gpt.main.run_formula_debate", return_value=(seed_pack, {"seed_formula_pack.json": {"ok": True}})):
-                                with patch("alpha_gpt.main.inject_seeds", return_value=["tree"]) as mock_inject:
-                                    with patch("alpha_gpt.main.run_gp", return_value=([{"expression": "cs_rank(close)", "tree": "tree", "fitness": 0.1}], _DummyLogbook())):
-                                        with patch("alpha_gpt.main._eval_expr", return_value=df):
-                                            with patch("alpha_gpt.main.compute_ic", return_value=pd.Series([0.1], index=idx)):
-                                                with patch("alpha_gpt.main.compute_icir", return_value=0.2):
-                                                    with patch("alpha_gpt.main.compute_turnover", return_value=0.3):
-                                                        with patch("alpha_gpt.main.backtest_alpha", return_value=bt):
-                                                            with patch("alpha_gpt.main.explain_alpha", return_value="ok"):
-                                                                with patch("alpha_gpt.main.plot_gp_evolution"):
-                                                                    with patch("alpha_gpt.main.plot_equity_curves"):
-                                                                        with patch("alpha_gpt.main.os.makedirs"):
-                                                                            with patch("builtins.open", mock_open()):
-                                                                                run_pipeline("idea", config=self.config)
+        import tempfile, os
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = os.path.join(tmpdir, "test_run")
+            os.makedirs(out_dir, exist_ok=True)
+
+            with patch.dict("os.environ", {"OPENROUTER_API_KEY": "test-key"}):
+                with patch("alpha_gpt.main._load_and_split", return_value=(split, split, ["close", "returns"], MagicMock())):
+                    with patch("alpha_gpt.main._compute_vw_benchmark", return_value=benchmark):
+                        with patch("alpha_gpt.main._create_client", return_value=MagicMock()):
+                            with patch("alpha_gpt.main.run_idea_debate", return_value=(hypotheses, {"idea_brief.json": {"ok": True}})):
+                                with patch("alpha_gpt.main.run_formula_debate", return_value=(seed_pack, {"seed_formula_pack.json": {"ok": True}})):
+                                    with patch("alpha_gpt.main.inject_seeds", return_value=["tree"]) as mock_inject:
+                                        with patch("alpha_gpt.main.run_gp", return_value=([{"expression": "cs_rank(close)", "tree": "tree", "fitness": 0.1}], _DummyLogbook())):
+                                            with patch("alpha_gpt.main._eval_expr", return_value=df):
+                                                with patch("alpha_gpt.main.compute_ic", return_value=pd.Series([0.1], index=idx)):
+                                                    with patch("alpha_gpt.main.compute_icir", return_value=0.2):
+                                                        with patch("alpha_gpt.main.compute_turnover", return_value=0.3):
+                                                            with patch("alpha_gpt.main.backtest_alpha", return_value=bt):
+                                                                with patch("alpha_gpt.main.explain_alpha", return_value="ok"):
+                                                                    with patch("alpha_gpt.main.plot_gp_evolution"):
+                                                                        with patch("alpha_gpt.main.plot_equity_curves"):
+                                                                            with patch("alpha_gpt.main._save_debate_artifacts"):
+                                                                                run_full("idea", config=self.config, out_dir=out_dir, gp_seed=0)
 
         mock_inject.assert_called_once()
         self.assertEqual(mock_inject.call_args.args[0], ["cs_rank(close)", "cs_rank(volume)"])
