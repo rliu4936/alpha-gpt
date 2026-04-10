@@ -1,6 +1,6 @@
-# Alpha-GPT 3.0
+# Alpha-GPT 3.0 (Work in Progress)
 
-Multi-agent LLM debate framework for discovering quantitative trading alphas. Three LLM agents debate a natural-language trading idea through two stages (idea debate, then formula debate), producing seed alpha formulas that are optionally evolved via genetic programming and backtested.
+Multi-agent LLM debate framework for discovering quantitative trading alphas. See [`report_draft.pdf`](report_draft.pdf) for details.
 
 ## Setup
 
